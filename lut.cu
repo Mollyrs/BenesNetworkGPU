@@ -21,7 +21,7 @@ void benes(int N, int rows, int columns,  int* network){
 
 
 int main(int argc, char *argv[]){
-	int N = 16; //8x8 benes network
+	int N = 8; //8x8 benes network
 
 	int LUTsize = N*(log2((double)N)*2 - 2);
 
@@ -32,21 +32,17 @@ int main(int argc, char *argv[]){
 	int M = N;
 	int M2 = N;
 	for (int i = 0; i < LUTsize/2; i+=N){
-		//printf("i: %d\n",i);
 		for (int j = 0; j < N; j += M2){
 			M2 = M; 
 			for (int k=0; k < M; k+=2){
-				//printf("mem: %d\n",i+j+k);
 				printf("n: %d\n",n);
-				LUT[i+j+k] = n%N;
-				LUT[i+j+k+1] = n%N + M/2;
+				LUT[i+j+k] = N*(j/M2)/(N/M2)+n%N;
+				LUT[i+j+k+1] = N*(j/M2)/(N/M2)+n%N + M/2;
 				n++;
-			}
-			n = n*2;
-			M = N/2;
-		}
-		
-			
+			} 
+			n = n*2*(N/M);
+		} 
+		M = M/2; 
 	}
 	
 	
