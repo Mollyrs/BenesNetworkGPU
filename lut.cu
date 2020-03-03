@@ -45,12 +45,19 @@ int main(int argc, char *argv[]){
 			}
 		} even=0; odd=1; M = M/2;
 	}
+	for (int x=LUTsize-N, i=LUTsize/2; i<LUTsize;i+=N, x-=N){
+		for(int j=0; j<N; j++){
+			int newIndex = LUT[x+j-LUTsize/2];
+			LUT[newIndex + i] = j;
+		}
+	}
+	
 	
 	
 	//benes<<<numBlocks,blockSize>>>(N, 4, 5, network);
 	//cudaDeviceSynchronize();
 	
-	for (int i = 0; i < LUTsize/2; i++){
+	for (int i = 0; i < LUTsize; i++){
 		if (i%N == 0) printf("\n");
 		printf("%d ", LUT[i]);
 	}
