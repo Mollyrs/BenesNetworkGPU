@@ -12,7 +12,8 @@
 //constucting 8x8 benes network
 //four rows, 5 columns, 20 routers total
 
-
+//put C:/Users/molly/Desktop/289Q/project/lut.cu
+//nvcc -std=c++11 lut.cu
 __global__
 void benes(int N, int rows, int columns,  int* network){
 
@@ -21,31 +22,29 @@ void benes(int N, int rows, int columns,  int* network){
 
 
 int main(int argc, char *argv[]){
-	int N = 8; //8x8 benes network
+	int N = 32; //8x8 benes network
 
 	int LUTsize = N*(log2((double)N)*2 - 2);
 
 	int* LUT;
 	cudaMallocManaged(&LUT,LUTsize*sizeof(int));
 	
-	int n;
 	int M = N;
-	int M2 = N;
-	for (int i = 0; i < LUTsize/2; i+=N){
-		for (int j = 0; j < N; j += M2){
-			M2 = M; 
-			for (int k=0; k < M; k+=2){
-				printf("n: %d\n",n);
-				LUT[i+j+k] = N*(j/M2)/(N/M2)+n%N;
-				LUT[i+j+k+1] = N*(j/M2)/(N/M2)+n%N + M/2;
-				n++;
-			} 
-			n = n*2*(N/M);
-		} 
-		M = M/2; 
+	int even = 0;
+	int odd = 1;
+	
+	for (int i =0; i < LUTsize/2; i+=N){
+		for (int j=0; j<N; j+=M){
+			for (int k =0; k<M/2; k++){
+				LUT[i+j+k] = even;
+				even+=2;
+			}
+			for (int k =M/2; k<M; k++){
+				LUT[i+j+k] = odd;
+				odd+=2;
+			}
+		} even=0; odd=1; M = M/2;
 	}
-	
-	
 	
 	
 	//benes<<<numBlocks,blockSize>>>(N, 4, 5, network);
