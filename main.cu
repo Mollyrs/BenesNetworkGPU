@@ -46,7 +46,24 @@ void makeLUT(int N, int* LUT){
 
 __global__
 void benes(int N,  char* network, int* LUT){
+	  int index = blockIdx.x * blockDim.x + threadIdx.x;
+	  int idx = threadIdx.x;
+	  int in1, in2, in1_index, in2_index;
+	  int level = blockIdx.x+1;
 
+	  if(blockIdx.x == 0){
+		in1 = network[index*2];
+		in2 = network[index*2+1];
+	  }
+	  else {
+		  in1_index = LUT[idx*2 + (blockIdx.x-1)*N];
+		  in2_index = LUT[idx*2 + (blockIdx.x-1)*N + 1];
+		  in1 = network[in1_index];
+		  in2 = network[in2_index];
+	  }  
+
+	  network[idx*2 + (blockIdx.x+1)*N] = in1;
+	  network[idx*2 + (blockIdx.x+1)*N + 1] = in2;
 }
 
 
