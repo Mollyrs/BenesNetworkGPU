@@ -55,16 +55,16 @@ int createMask(int n)
 
 __global__
 void benes(int N,  char* network, int* LUT, bool* valid, int mask){
-	  int idx = threadIdx.x;
-	  int in1, in2, in1_index, in2_index;
-	  int level = blockIdx.x+1;
-        // serializing each block. Puting a fence on the global head for each block
-		while(fence != blockIdx.x);
+	int idx = threadIdx.x;
+	int in1, in2, in1_index, in2_index;
+	int level = blockIdx.x+1;
+	// serializing each block. Puting a fence on the global head for each block
+	while(fence != blockIdx.x);
 			
-	  __syncthreads();
-	  if(blockIdx.x == 0){
-        if( (valid[idx*2] == 1) && (valid[idx*2+1] == 1)){
-		    in1 = network[idx*2];
+	__syncthreads();
+	if(blockIdx.x == 0){
+		if( (valid[idx*2] == 1) && (valid[idx*2+1] == 1)){
+			in1 = network[idx*2];
 			in2 = network[idx*2+1];
 			if ((in1 & mask) < (in2 & mask)){
 				network[idx*2 + (blockIdx.x+1)*N] = in1;  
@@ -79,30 +79,30 @@ void benes(int N,  char* network, int* LUT, bool* valid, int mask){
 			++fence;
 			__syncthreads();
 		}
-	  }
-	  else {
+	}
+	else {
 		if((valid[idx*2 + (blockIdx.x)*N])==1 && (valid[idx*2 + (blockIdx.x)*N+1]) == 1){
-		  in1_index = LUT[idx*2 + (blockIdx.x-1)*N];
-		  in2_index = LUT[idx*2 + (blockIdx.x-1)*N + 1];
-		  in1 = network[in1_index+(blockIdx.x-1)*N];
-		  in2 = network[in2_index+(blockIdx.x-1)*N];
-		  if ((in1 & mask) < (in2 & mask)){
-		  	network[idx*2 + (blockIdx.x)*N] = in1;
-			network[idx*2 + (blockIdx.x)*N + 1] = in2;
-		  }
-		  else{
-			network[idx*2 + (blockIdx.x)*N] = in2;
-			network[idx*2 + (blockIdx.x)*N + 1] = in1;  
-		  }
-		  valid[idx*2 + (blockIdx.x)*N] = 0; valid[idx*2 + 1 + (blockIdx.x)*N] = 0;
-		  valid[idx*2 + (blockIdx.x+1)*N] = 1; valid[idx*2 + 1 + (blockIdx.x+1)*N] = 1;
-		  ++fence;
-		  if (fence ==  2*log2((double)N)-1)
-			  fence = 0;
-            
+			in1_index = LUT[idx*2 + (blockIdx.x-1)*N];
+			in2_index = LUT[idx*2 + (blockIdx.x-1)*N + 1];
+			in1 = network[in1_index+(blockIdx.x-1)*N];
+			in2 = network[in2_index+(blockIdx.x-1)*N];
+			if ((in1 & mask) < (in2 & mask)){
+				network[idx*2 + (blockIdx.x)*N] = in1;
+				network[idx*2 + (blockIdx.x)*N + 1] = in2;
+			}
+			else{
+				network[idx*2 + (blockIdx.x)*N] = in2;
+				network[idx*2 + (blockIdx.x)*N + 1] = in1;  
+			}
+			valid[idx*2 + (blockIdx.x)*N] = 0; valid[idx*2 + 1 + (blockIdx.x)*N] = 0;
+			valid[idx*2 + (blockIdx.x+1)*N] = 1; valid[idx*2 + 1 + (blockIdx.x+1)*N] = 1;
+			++fence;
+			if (fence ==  2*log2((double)N)-1)
+				fence = 0;
+		
 		} 
-	  }
-	
+	}
+
 }
 
 
@@ -151,13 +151,13 @@ int main(int argc, char *argv[]){
 		if (i%N == 0) printf("\n");
 		printf("%d ", network[i]);
 	}
-  printf("\n");
-  printf("The intermidiate layers are:\n");
-  for (int i = N; i < N*(numBlocks-1); i++){
-	if (i%N == 0) printf("\n");
-	printf("%d ", network[i]);
-}
-printf("\n");
+	printf("\n");
+	printf("The intermidiate layers are:\n");
+	for (int i = N; i < N*(numBlocks-1); i++){
+		if (i%N == 0) printf("\n");
+		printf("%d ", network[i]);
+		}
+	printf("\n");
   
 	for (int i = N*(numBlocks-1) ; i < N*(numBlocks); i++){
 		if((mask & network[i]) != i % N){
