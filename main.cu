@@ -7,12 +7,14 @@
 #include <string.h>
 #include <math.h>
 #include <fstream>
+#include <cooperative_groups.h>
 
 // includes, project
 #include <cuda.h>
 #include <cuda_runtime.h>
-__device__ volatile int fence;
 
+using namespace cooperative_groups;
+namespace cg = cooperative_groups;
 //constucting 8x8 benes network
 //four rows, 5 columns, 20 routers total
 
@@ -54,16 +56,20 @@ int createMask(int n)
 
 
 __global__
-void benes(int N,  char* network, int* LUT, bool* valid, int mask){
+void benes(int N,  char* network, int* LUT, volatile int* valid, int mask){
 	int idx = threadIdx.x;
 	int in1, in2, in1_index, in2_index;
-	int level = blockIdx.x+1;
-	// serializing each block. Puting a fence on the global head for each block
-	while(fence != blockIdx.x);
+	// int level = blockIdx.x;
+
+	// auto g = this_thread_block();
+	// thread_group tile4 = tiled_partition(g, 2);
+	// // if (tile4.thread_rank()==0) 
+	// printf("Hello from tile4 rank %d: rank:%d\tthreadID:%d\tblockID:%d\n",tile4.thread_rank(),this_thread_block().thread_rank(),idx,level);
+
 			
 	__syncthreads();
-	if(blockIdx.x == 0){
-		if( (valid[idx*2] == 1) && (valid[idx*2+1] == 1)){
+	while((valid[idx*2 + (blockIdx.x)*N])==0 || (valid[idx*2 + (blockIdx.x)*N+1]) == 0);
+		if(blockIdx.x == 0){
 			in1 = network[idx*2];
 			in2 = network[idx*2+1];
 			if ((in1 & mask) < (in2 & mask)){
@@ -75,13 +81,11 @@ void benes(int N,  char* network, int* LUT, bool* valid, int mask){
 				network[idx*2 + (blockIdx.x+1)*N + 1] = in1;
 			}
 			valid[idx*2] = 0;  valid[idx*2 + 1] = 0;
-			valid[idx*2 + (blockIdx.x+1)*N] = 1;   valid[idx*2 + 1 + (blockIdx.x+1)*N] = 1;
-			++fence;
+			valid[idx*2 + (blockIdx.x+1)*N]=1; valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
 			__syncthreads();
 		}
-	}
-	else {
-		if((valid[idx*2 + (blockIdx.x)*N])==1 && (valid[idx*2 + (blockIdx.x)*N+1]) == 1){
+		
+		else {
 			in1_index = LUT[idx*2 + (blockIdx.x-1)*N];
 			in2_index = LUT[idx*2 + (blockIdx.x-1)*N + 1];
 			in1 = network[in1_index+(blockIdx.x-1)*N];
@@ -95,13 +99,9 @@ void benes(int N,  char* network, int* LUT, bool* valid, int mask){
 				network[idx*2 + (blockIdx.x)*N + 1] = in1;  
 			}
 			valid[idx*2 + (blockIdx.x)*N] = 0; valid[idx*2 + 1 + (blockIdx.x)*N] = 0;
-			valid[idx*2 + (blockIdx.x+1)*N] = 1; valid[idx*2 + 1 + (blockIdx.x+1)*N] = 1;
-			++fence;
-			if (fence ==  2*log2((double)N)-1)
-				fence = 0;
-		
+			valid[idx*2 + (blockIdx.x+1)*N]=1; valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;		
 		} 
-	}
+	
 
 }
 
@@ -137,9 +137,9 @@ int main(int argc, char *argv[]){
 	makeLUT(N,LUT);
 	int mask = createMask(log2((double)N));
   
-    bool *valid;
-	cudaMallocManaged(&valid,N*(numBlocks)*sizeof(bool));
-	memset(valid,0,N*(numBlocks+1)*sizeof(bool)); 
+    int *valid;
+	cudaMallocManaged(&valid,N*(numBlocks)*sizeof(int));
+	memset(valid,0,N*(numBlocks+1)*sizeof(int)); 
 	for(int i = 0; i < N; i++)
 		valid[i] = 1;
 	benes<<<numBlocks,blockSize>>>(N, network, LUT, valid, mask);
