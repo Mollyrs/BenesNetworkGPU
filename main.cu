@@ -15,8 +15,10 @@
 
 using namespace cooperative_groups;
 namespace cg = cooperative_groups;
-//constucting 8x8 benes network
-//four rows, 5 columns, 20 routers total
+
+#define FILESIZE 32
+
+
 
 __host__
 void makeLUT(int N, int* LUT){
@@ -56,53 +58,123 @@ int createMask(int n)
 
 
 __global__
-void benes(int N,  char* network, int* LUT, volatile int* valid, int mask){
+void benes(int N, int block, char* network, int* LUT, volatile int* valid, int mask, char* data, char* output){
 	int idx = threadIdx.x;
 	int in1, in2, in1_index, in2_index;
-	// int level = blockIdx.x;
-
-	// auto g = this_thread_block();
-	// thread_group tile4 = tiled_partition(g, 2);
-	// // if (tile4.thread_rank()==0) 
-	// printf("Hello from tile4 rank %d: rank:%d\tthreadID:%d\tblockID:%d\n",tile4.thread_rank(),this_thread_block().thread_rank(),idx,level);
-
-			
-	__syncthreads();
-	while((valid[idx*2 + (blockIdx.x)*N])==0 || (valid[idx*2 + (blockIdx.x)*N+1]) == 0);
+	int readOffset=0;
+	int fileSize = FILESIZE/2;
+	int readOffsetSecondNet=fileSize;
+	
 		if(blockIdx.x == 0){
-			in1 = network[idx*2];
-			in2 = network[idx*2+1];
-			if ((in1 & mask) < (in2 & mask)){
-				network[idx*2 + (blockIdx.x+1)*N] = in1;  
-				network[idx*2 + (blockIdx.x+1)*N + 1] = in2;
+			while(readOffset < fileSize){
+				in1 = data[idx*2 + readOffset];
+				in2 = data[idx*2+1 + readOffset];
+				readOffset+=N;
+				//printf("Block %d produced %d %d\n", blockIdx.x, in1, in2);
+				//printf("waiting for next block %d to consume\n", blockIdx.x + 1);
+				while((valid[idx*2 + (blockIdx.x+1)*N])==1 || (valid[idx*2 + (blockIdx.x+1)*N+1]) == 1);
+				if ((in1 & mask) < (in2 & mask)){
+					network[idx*2 + (blockIdx.x+1)*N] = in1;  
+					network[idx*2 + (blockIdx.x+1)*N + 1] = in2;
+				}
+				else{
+					network[idx*2 + (blockIdx.x+1)*N] = in2;  
+					network[idx*2 + (blockIdx.x+1)*N + 1] = in1;
+				}
+				valid[idx*2 + (blockIdx.x+1)*N]=1; valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
 			}
-			else{
-				network[idx*2 + (blockIdx.x+1)*N] = in2;  
-				network[idx*2 + (blockIdx.x+1)*N + 1] = in1;
-			}
-			valid[idx*2] = 0;  valid[idx*2 + 1] = 0;
-			valid[idx*2 + (blockIdx.x+1)*N]=1; valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
-			__syncthreads();
 		}
 		
-		else {
-			in1_index = LUT[idx*2 + (blockIdx.x-1)*N];
-			in2_index = LUT[idx*2 + (blockIdx.x-1)*N + 1];
-			in1 = network[in1_index+(blockIdx.x-1)*N];
-			in2 = network[in2_index+(blockIdx.x-1)*N];
-			if ((in1 & mask) < (in2 & mask)){
-				network[idx*2 + (blockIdx.x)*N] = in1;
-				network[idx*2 + (blockIdx.x)*N + 1] = in2;
+		else if ( blockIdx.x < block) {
+			while(readOffset < fileSize){
+				//printf("waiting for previous block %d to produce\n", blockIdx.x - 1);
+				while((valid[idx*2 + (blockIdx.x)*N])==0 || (valid[idx*2 + (blockIdx.x)*N+1]) == 0);
+				in1_index = LUT[idx*2 + (blockIdx.x-1)*N];
+				in2_index = LUT[idx*2 + (blockIdx.x-1)*N + 1];
+				in1 = network[in1_index+(blockIdx.x)*N];
+				in2 = network[in2_index+(blockIdx.x)*N];
+				//printf("Block %d consumed %d %d\n", blockIdx.x, in1, in2);
+				valid[idx*2 + (blockIdx.x)*N] = 0; valid[idx*2 + 1 + (blockIdx.x)*N] = 0;
+			
+				//printf("waiting for next block %d to consume\n", blockIdx.x + 1);
+				while((valid[idx*2 + (blockIdx.x+1)*N])==1 || (valid[idx*2 + (blockIdx.x+1)*N+1]) == 1);
+				if ((in1 & mask) < (in2 & mask)){
+					network[idx*2 + (blockIdx.x+1)*N] = in1;
+					network[idx*2 + (blockIdx.x+1)*N + 1] = in2;
+				}
+				else{
+					network[idx*2 + (blockIdx.x+1)*N] = in2;
+					network[idx*2 + (blockIdx.x+1)*N + 1] = in1;  
+				}
+				
+				if (blockIdx.x != gridDim.x - 1 && blockIdx.x != block-1){
+					valid[idx*2 + (blockIdx.x+1)*N]=1; valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
+				}
+				else {
+					output[idx*2 + readOffset] = network[idx*2 + (blockIdx.x+1)*N];
+					output[idx*2+1 + readOffset] = network[idx*2 + (blockIdx.x+1)*N + 1];
+				}
+				// printf("Block %d produced %d %d\n", gridDim.x,output[idx*2 + readOffset], output[idx*2+1 + readOffset]);
+				readOffset += N;
 			}
-			else{
-				network[idx*2 + (blockIdx.x)*N] = in2;
-				network[idx*2 + (blockIdx.x)*N + 1] = in1;  
-			}
-			valid[idx*2 + (blockIdx.x)*N] = 0; valid[idx*2 + 1 + (blockIdx.x)*N] = 0;
-			valid[idx*2 + (blockIdx.x+1)*N]=1; valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;		
 		} 
-	
 
+
+
+		else if(blockIdx.x == block){
+			while(readOffsetSecondNet < FILESIZE){
+				in1 = data[idx*2 + readOffsetSecondNet];
+				in2 = data[idx*2+1 + readOffsetSecondNet];
+				readOffsetSecondNet+=N;
+				// printf("Block %d produced %d %d\n", blockIdx.x, in1, in2);
+				//printf("waiting for next block %d to consume\n", blockIdx.x + 1);
+				while((valid[idx*2 + (blockIdx.x+1)*N])==1 || (valid[idx*2 + (blockIdx.x+1)*N+1]) == 1);
+				if ((in1 & mask) < (in2 & mask)){
+					network[idx*2 + (blockIdx.x+1)*N] = in1;  
+					network[idx*2 + (blockIdx.x+1)*N + 1] = in2;
+				}
+				else{
+					network[idx*2 + (blockIdx.x+1)*N] = in2;  
+					network[idx*2 + (blockIdx.x+1)*N + 1] = in1;
+				}
+				// printf("Block %d produced %d %d\n", blockIdx.x, network[idx*2 + (blockIdx.x+1)*N],network[idx*2 + (blockIdx.x+1)*N+1]);
+				valid[idx*2 + (blockIdx.x+1)*N]=1; valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
+			}
+		}
+		
+		else{
+			while(readOffsetSecondNet < FILESIZE){
+				// printf("waiting for previous block %d to produce\n", blockIdx.x - 1);
+				while((valid[idx*2 + (blockIdx.x)*N])==0 || (valid[idx*2 + (blockIdx.x)*N+1]) == 0);
+				// printf("waiting for previous block %d to produce\n", blockIdx.x - 1);
+				in1_index = LUT[idx*2 + ((blockIdx.x%block)-1)*N];
+				in2_index = LUT[idx*2 + ((blockIdx.x%block)-1)*N + 1];
+				in1 = network[in1_index+(blockIdx.x)*N];
+				in2 = network[in2_index+(blockIdx.x)*N];
+				// printf("Block %d thread %d consumed %d %d\n", blockIdx.x,threadIdx.x, in1, in2);
+				valid[idx*2 + (blockIdx.x)*N] = 0; valid[idx*2 + 1 + (blockIdx.x)*N] = 0;
+			
+				//printf("waiting for next block %d to consume\n", blockIdx.x + 1);
+				while((valid[idx*2 + (blockIdx.x+1)*N])==1 || (valid[idx*2 + (blockIdx.x+1)*N+1]) == 1);
+				if ((in1 & mask) < (in2 & mask)){
+					network[idx*2 + (blockIdx.x+1)*N] = in1;
+					network[idx*2 + (blockIdx.x+1)*N + 1] = in2;
+				}
+				else{
+					network[idx*2 + (blockIdx.x+1)*N] = in2;
+					network[idx*2 + (blockIdx.x+1)*N + 1] = in1;  
+				}
+				//printf("Block %d produced %d %d\n", blockIdx.x, in1, in2);
+				if (blockIdx.x != gridDim.x - 1){
+					valid[idx*2 + (blockIdx.x+1)*N]=1; valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
+				}
+				else {
+					output[idx*2 + readOffsetSecondNet] = network[idx*2 + (blockIdx.x+1)*N];
+					output[idx*2+1 + readOffsetSecondNet] = network[idx*2 + (blockIdx.x+1)*N + 1];
+				}
+				readOffsetSecondNet += N;
+			}
+		}
 }
 
 
@@ -122,15 +194,24 @@ int main(int argc, char *argv[]){
 
 	
 	int N = atoi(argv[2]);
+	if (FILESIZE<N)
+		N = FILESIZE;
 	int blockSize = N/2; 
-	int numBlocks = 2*log2((double)N)-1; 
+	int blocks = 2*log2((double)N)-1; 
+	int b = 2*log2((double)N)-1;
 	int LUTsize = N*(log2((double)N)*2 - 2);
-	
+	int numBlocks;
+
+	if (FILESIZE <= N)
+		numBlocks = blocks;
+	else
+		numBlocks = 2*blocks;
+
 	char* network;
 	cudaMallocManaged(&network,N*(numBlocks+1)*sizeof(char));
 	memset(network,0,N*(numBlocks+1)*sizeof(char));
-	file.read(network, N*sizeof(char));
-	file.close();
+	//file.read(network, N*sizeof(char));
+	//file.close();
 	
 	int* LUT;
 	cudaMallocManaged(&LUT,LUTsize*sizeof(int));
@@ -142,32 +223,40 @@ int main(int argc, char *argv[]){
 	memset(valid,0,N*(numBlocks+1)*sizeof(int)); 
 	for(int i = 0; i < N; i++)
 		valid[i] = 1;
-	benes<<<numBlocks,blockSize>>>(N, network, LUT, valid, mask);
+	
+	char* data;
+	cudaMallocManaged(&data,FILESIZE*sizeof(char));
+	memset(data,0,FILESIZE*sizeof(char));
+	file.read(data, FILESIZE*sizeof(char));
+	file.close();
+	
+	char* output;
+	cudaMallocManaged(&output,FILESIZE*sizeof(char));
+	memset(output,0,FILESIZE*sizeof(char));
+
+	
+	int* done;
+	cudaMallocManaged(&done,sizeof(int));
+	*done = 0;
+	
+	benes<<<numBlocks,blockSize>>>(N, blocks, network, LUT, valid, mask, data, output);
 	cudaDeviceSynchronize();
 	
 	
+	
+	
 	printf("The input is:");
-	for (int i = 0; i < N; i++){
+	for (int i = 0; i < FILESIZE; i++){
 		if (i%N == 0) printf("\n");
-		printf("%d ", network[i]);
+		printf("%d ", data[i]);
 	}
-	printf("\n");
-	printf("The intermidiate layers are:\n");
-	for (int i = N; i < N*(numBlocks-1); i++){
-		if (i%N == 0) printf("\n");
-		printf("%d ", network[i]);
-		}
-	printf("\n");
+	printf("\n\n");
+
   
-	for (int i = N*(numBlocks-1) ; i < N*(numBlocks); i++){
-		if((mask & network[i]) != i % N){
-			printf("ERROR in routing\n");
-			return 1; 
-		}
-	}
-	printf("Routing was successful!\nThe output is:\n");
-	for (int i = N*(numBlocks-1); i < N*(numBlocks); i++){
-		printf("%d ", network[i]);
+	printf("The output is:");
+	for (int i = 0; i < FILESIZE; i++){
+		if (i%N == 0) printf("\n");
+		printf("%d ", output[i]);
 	}
 	printf("\n");
    
