@@ -16,7 +16,8 @@
 using namespace cooperative_groups;
 namespace cg = cooperative_groups;
 
-#define FILESIZE 32
+#define FILESIZE_CHAR 1048576
+#define FILESIZE_INT FILESIZE_CHAR/4
 
 
 
@@ -58,11 +59,11 @@ int createMask(int n)
 
 
 __global__
-void benes(int N, int block, char* network, int* LUT, volatile int* valid, int mask, char* data, char* output){
+void benes(int N, int block, char* network, int* LUT, volatile int* valid, int mask, int* data, int* output){
 	int idx = threadIdx.x;
 	int in1, in2, in1_index, in2_index;
 	int readOffset=0;
-	int fileSize = FILESIZE/2;
+	int fileSize = FILESIZE_INT/2;
 	int readOffsetSecondNet=fileSize;
 	thread_group g = tiled_partition(this_thread_block(), 2);
 		if(blockIdx.x == 0){
@@ -81,8 +82,8 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 					network[idx*2 + (blockIdx.x+1)*N] = in2;  
 					network[idx*2 + (blockIdx.x+1)*N + 1] = in1;
 				}
-				g.sync();
 				valid[idx + (blockIdx.x+1)*(N/2)]=1;
+				g.sync();
 				
 			}
 		}
@@ -106,10 +107,10 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 					network[idx*2 + (blockIdx.x+1)*N] = in2;
 					network[idx*2 + (blockIdx.x+1)*N + 1] = in1;  
 				}
-				g.sync();
 				if (blockIdx.x != gridDim.x - 1 && blockIdx.x != block-1){
 					
 					valid[idx + (blockIdx.x+1)*(N/2)]=1;// valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
+					g.sync();
 				}
 				else {
 					output[idx*2 + readOffset] = network[idx*2 + (blockIdx.x+1)*N];
@@ -122,7 +123,7 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 
 
 		else if(blockIdx.x == block){
-			while(readOffsetSecondNet < FILESIZE){
+			while(readOffsetSecondNet < FILESIZE_INT){
 				in1 = data[idx*2 + readOffsetSecondNet];
 				in2 = data[idx*2+1 + readOffsetSecondNet];
 				readOffsetSecondNet+=N;
@@ -135,13 +136,13 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 					network[idx*2 + (blockIdx.x+1)*N] = in2;  
 					network[idx*2 + (blockIdx.x+1)*N + 1] = in1;
 				}
-				g.sync();
 				valid[idx + (blockIdx.x+1)*(N/2)]=1;
+				g.sync();
 			}
 		}
 		
 		else{
-			while(readOffsetSecondNet < FILESIZE){
+			while(readOffsetSecondNet < FILESIZE_INT){
 				while((valid[idx + (blockIdx.x)*(N/2)])==0);
 
 				in1_index = LUT[idx*2 + ((blockIdx.x%block)-1)*N];
@@ -163,6 +164,7 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 				}
 				if (blockIdx.x != gridDim.x - 1){
 					valid[idx + (blockIdx.x+1)*(N/2)]=1; 
+					g.sync();
 				}
 				else {
 					output[idx*2 + readOffsetSecondNet] = network[idx*2 + (blockIdx.x+1)*N];
@@ -190,15 +192,15 @@ int main(int argc, char *argv[]){
 
 	
 	int N = atoi(argv[2]);
-	if (FILESIZE<N)
-		N = FILESIZE;
+	if (FILESIZE_INT<N)
+		N = FILESIZE_INT;
 	int blockSize = N/2; 
 	int blocks = 2*log2((double)N)-1; 
 	int b = 2*log2((double)N)-1;
 	int LUTsize = N*(log2((double)N)*2 - 2);
 	int numBlocks;
 
-	if (FILESIZE <= N)
+	if (FILESIZE_INT <= N)
 		numBlocks = blocks;
 	else
 		numBlocks = 2*blocks;
@@ -221,51 +223,56 @@ int main(int argc, char *argv[]){
 		valid[i] = 1;
 	
 	char* data;
-	cudaMallocManaged(&data,FILESIZE*sizeof(char));
-	memset(data,0,FILESIZE*sizeof(char));
-	file.read(data, FILESIZE*sizeof(char));
+	cudaMallocManaged(&data,FILESIZE_CHAR*sizeof(char));
+	memset(data,0,FILESIZE_CHAR*sizeof(char));
+	file.read(data, FILESIZE_CHAR*sizeof(char));
 	file.close();
+
+	int* idata;
+	cudaMallocManaged(&idata,FILESIZE_CHAR*sizeof(char));
+	memcpy(idata, data, FILESIZE_CHAR*sizeof(char));
 	
-	char* output;
-	cudaMallocManaged(&output,FILESIZE*sizeof(char));
-	memset(output,0,FILESIZE*sizeof(char));
+	int* output;
+	cudaMallocManaged(&output,FILESIZE_CHAR*sizeof(char));
+	memset(output,0,FILESIZE_CHAR*sizeof(char));
 
 	
 	
-	benes<<<numBlocks,blockSize>>>(N, blocks, network, LUT, valid, mask, data, output);
+	benes<<<numBlocks,blockSize>>>(N, blocks, network, LUT, valid, mask, idata, output);
 	cudaDeviceSynchronize();
 	
 	
 	
 	
-	printf("The input is:");
-	for (int i = 0; i < FILESIZE; i++){
-		if (i%N == 0) printf("\n");
-		printf("%d ", data[i]);
-	}
-	printf("\n\n");
+	// printf("The input is:");
+	// for (int i = 0; i < FILESIZE_INT; i++){
+	// 	if (i%N == 0) printf("\n");
+	// 	printf("%d ", data[i]);
+	// }
+	// printf("\n\n");
 
-	printf("The output is:");
-	for (int i = 0; i < FILESIZE; i++){
-		if (i%N == 0) printf("\n");
-		printf("%d ", output[i]);
-	}
+	// printf("The output is:");
+	// for (int i = 0; i < FILESIZE_INT; i++){
+	// 	if (i%N == 0) printf("\n");
+	// 	printf("%d ", output[i]);
+	// }
 	printf("\n\n");
-	for (int i = 0; i < FILESIZE-1; i++){
+	for (int i = 0; i < FILESIZE_INT-1; i++){
 		if (i%N != N-1) {
 			if((mask & output[i+1]) < (mask & output[i])){
-				printf("ERROR in routing at output %d %d %d\n",i ,output[i+1],output[i] );
+				printf("ERROR in routing at output %d %d %d\n",i ,mask & output[i+1],mask &output[i] );
 				return 1;
 			}
 		}
 	}
-	printf("Routing was successful!\n");
+	// printf("Routing was successful!\n");
 	printf("\n");
    
 	cudaFree(valid);
 	cudaFree(LUT);
 	cudaFree(network);
 	cudaFree(data);
+	cudaFree(idata);
 	cudaFree(output);
 }
  
