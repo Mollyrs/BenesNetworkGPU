@@ -16,7 +16,7 @@
 using namespace cooperative_groups;
 namespace cg = cooperative_groups;
 
-#define FILESIZE_CHAR 256
+#define FILESIZE_CHAR 1048576
 #define FILESIZE_INT FILESIZE_CHAR/4
 
 
@@ -184,7 +184,6 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 					output[idx*2 + readOffsetSecondNet] = network[idx*2 + (blockIdx.x+1)*N];
 					output[idx*2+1 + readOffsetSecondNet] = network[idx*2 + (blockIdx.x+1)*N + 1];
 				}
-				// printf("HEREEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE\n");
 				readOffsetSecondNet += N;
 			}
 		}
@@ -223,8 +222,7 @@ int main(int argc, char *argv[]){
 	char* network;
 	cudaMallocManaged(&network,N*(numBlocks+1)*sizeof(char));
 	memset(network,0,N*(numBlocks+1)*sizeof(char));
-	//file.read(network, N*sizeof(char));
-	//file.close();
+
 	
 	int* LUT;
 	cudaMallocManaged(&LUT,LUTsize*sizeof(int));
@@ -250,34 +248,30 @@ int main(int argc, char *argv[]){
 	char* output;
 	cudaMallocManaged(&output,FILESIZE_CHAR*sizeof(char));
 	memset(output,0,FILESIZE_CHAR*sizeof(char));
-
-	
 	
 	benes<<<numBlocks,blockSize>>>(N, blocks, network, LUT, valid, mask, idata, output);
 	cudaDeviceSynchronize();
-	
-	
-	
-	
-	printf("The input is:");
-	for (int i = 0; i < FILESIZE_INT; i++){
-		if (i%N == 0) printf("\n");
-		printf("%d ", idata[i]);
-	}
-	printf("\n\n");
+
+	// printf("The input is:");
+	// for (int i = 0; i < FILESIZE_INT; i++){
+		// if (i%N == 0) printf("\n");
+		// printf("%d ", idata[i]);
+	// }
+	// printf("\n\n");
 
   
-	printf("The output is:");
-	for (int i = 0; i < FILESIZE_INT; i++){
-		if (i%N == 0) printf("\n");
-		printf("%d ", output[i]);
-	}
-	printf("\n");
+	// printf("The output is:");
+	// for (int i = 0; i < FILESIZE_INT; i++){
+		// if (i%N == 0) printf("\n");
+		// printf("%d ", output[i]);
+	// }
+	// printf("\n");
    
 	cudaFree(valid);
 	cudaFree(LUT);
 	cudaFree(network);
 	cudaFree(data);
+	cudaFree(idata);
 	cudaFree(output);
 }
  
