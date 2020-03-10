@@ -64,7 +64,7 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 	int readOffset=0;
 	int fileSize = FILESIZE_INT/2;
 	int readOffsetSecondNet=fileSize;
-	thread_group g = tiled_partition(this_thread_block(), 2);
+	thread_group g = tiled_partition(this_thread_block(), 32); //stops working after 32?
 		if(blockIdx.x == 0){
 			while(readOffset < fileSize){
 				in1 = data[idx*2 + readOffset];
@@ -83,6 +83,7 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 				// 	network[idx*2 + (blockIdx.x+1)*N + 1] = in1;
 				// }
 				g.sync();
+				//__syncthreads();
 				valid[idx + (blockIdx.x+1)*(N/2)]=1;// valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
 				
 			}
@@ -104,7 +105,7 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 				// if ((in1 & mask) < (in2 & mask)){
 				network[idx*2 + (blockIdx.x+1)*N] = in1;
 				network[idx*2 + (blockIdx.x+1)*N + 1] = in2;
-				g.sync();
+
 				// }
 				// else{
 				// 	network[idx*2 + (blockIdx.x+1)*N] = in2;
@@ -112,8 +113,9 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 				// }
 				
 				if (blockIdx.x != gridDim.x - 1 && blockIdx.x != block-1){
-					g.sync();
 					valid[idx + (blockIdx.x+1)*(N/2)]=1;// valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
+					g.sync();
+					//__syncthreads();
 				}
 				else {
 					output[idx*2 + readOffset] = network[idx*2 + (blockIdx.x+1)*N];
@@ -142,10 +144,11 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 				// 	network[idx*2 + (blockIdx.x+1)*N] = in2;  
 				// 	network[idx*2 + (blockIdx.x+1)*N + 1] = in1;
 				// }
-				__syncthreads();
+
 				// printf("Block %d produced %d %d\n", blockIdx.x, network[idx*2 + (blockIdx.x+1)*N],network[idx*2 + (blockIdx.x+1)*N+1]);
 				valid[idx + (blockIdx.x+1)*(N/2)]=1;// valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
-				__syncthreads();
+				//__syncthreads();
+				g.sync();
 			}
 		}
 		
@@ -153,7 +156,6 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 			while(readOffsetSecondNet < FILESIZE_INT){
 				// printf("waiting for previous block %d to produce\n", blockIdx.x - 1);
 				while((valid[idx + (blockIdx.x)*(N/2)])==0);
-				__syncthreads();
 				
 				// printf("waiting for previous block %d to produce\n", blockIdx.x - 1);
 				in1_index = LUT[idx*2 + ((blockIdx.x%block)-1)*N];
@@ -178,6 +180,8 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 				//printf("Block %d produced %d %d\n", blockIdx.x, in1, in2);
 				if (blockIdx.x != gridDim.x - 1){
 					valid[idx + (blockIdx.x+1)*(N/2)]=1; //valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
+					//__syncthreads();
+					g.sync();
 					//printf("valid:%d index:%d\n",valid[idx + (blockIdx.x+1)*N],idx + (blockIdx.x+1)*N);
 				}
 				else {
