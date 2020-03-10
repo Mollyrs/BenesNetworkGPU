@@ -70,8 +70,8 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 				in1 = data[idx*2 + readOffset];
 				in2 = data[idx*2+1 + readOffset];
 				readOffset+=N;
-				//printf("Block %d produced %d %d\n", blockIdx.x, in1, in2);
-				//printf("waiting for next block %d to consume\n", blockIdx.x + 1);
+				
+				
 				while((valid[idx + (blockIdx.x+1)*(N/2)])==1);
 				if ((in1 & mask) < (in2 & mask)){
 					network[idx*2 + (blockIdx.x+1)*N] = in1;  
@@ -82,23 +82,20 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 					network[idx*2 + (blockIdx.x+1)*N + 1] = in1;
 				}
 				g.sync();
-				valid[idx + (blockIdx.x+1)*(N/2)]=1;// valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
+				valid[idx + (blockIdx.x+1)*(N/2)]=1;
 				
 			}
 		}
 		
 		else if ( blockIdx.x < block) {
 			while(readOffset < fileSize){
-				//printf("waiting for previous block %d to produce\n", blockIdx.x - 1);
 				while((valid[idx + (blockIdx.x)*(N/2)])==0);
 				in1_index = LUT[idx*2 + (blockIdx.x-1)*N];
 				in2_index = LUT[idx*2 + (blockIdx.x-1)*N + 1];
 				in1 = network[in1_index+(blockIdx.x)*N];
 				in2 = network[in2_index+(blockIdx.x)*N];
-				//printf("Block %d consumed %d %d\n", blockIdx.x, in1, in2);
-				valid[idx + (blockIdx.x)*(N/2)] = 0;// valid[idx*2 + 1 + (blockIdx.x)*N] = 0;
-			
-				//printf("waiting for next block %d to consume\n", blockIdx.x + 1);
+
+				valid[idx + (blockIdx.x)*(N/2)] = 0;
 				while((valid[idx + (blockIdx.x+1)*(N/2)])==1);
 				if ((in1 & mask) < (in2 & mask)){
 					network[idx*2 + (blockIdx.x+1)*N] = in1;
@@ -118,7 +115,6 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 					output[idx*2 + readOffset] = network[idx*2 + (blockIdx.x+1)*N];
 					output[idx*2+1 + readOffset] = network[idx*2 + (blockIdx.x+1)*N + 1];
 				}
-				// printf("Block %d produced %d %d\n", gridDim.x,output[idx*2 + readOffset], output[idx*2+1 + readOffset]);
 				readOffset += N;
 			}
 		} 
@@ -130,8 +126,6 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 				in1 = data[idx*2 + readOffsetSecondNet];
 				in2 = data[idx*2+1 + readOffsetSecondNet];
 				readOffsetSecondNet+=N;
-				// printf("Block %d produced %d %d\n", blockIdx.x, in1, in2);
-				//printf("waiting for next block %d to consume\n", blockIdx.x + 1);
 				while((valid[idx + (blockIdx.x+1)*(N/2)])==1);
 				if ((in1 & mask) < (in2 & mask)){
 					network[idx*2 + (blockIdx.x+1)*N] = in1;  
@@ -142,47 +136,38 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 					network[idx*2 + (blockIdx.x+1)*N + 1] = in1;
 				}
 				g.sync();
-				// printf("Block %d produced %d %d\n", blockIdx.x, network[idx*2 + (blockIdx.x+1)*N],network[idx*2 + (blockIdx.x+1)*N+1]);
-				valid[idx + (blockIdx.x+1)*(N/2)]=1;// valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
+				valid[idx + (blockIdx.x+1)*(N/2)]=1;
 			}
 		}
 		
 		else{
 			while(readOffsetSecondNet < FILESIZE){
-				// printf("waiting for previous block %d to produce\n", blockIdx.x - 1);
 				while((valid[idx + (blockIdx.x)*(N/2)])==0);
-				__syncthreads();
-				
-				// printf("waiting for previous block %d to produce\n", blockIdx.x - 1);
+
 				in1_index = LUT[idx*2 + ((blockIdx.x%block)-1)*N];
 				in2_index = LUT[idx*2 + ((blockIdx.x%block)-1)*N + 1];
 				in1 = network[in1_index+(blockIdx.x)*N];
 				in2 = network[in2_index+(blockIdx.x)*N];
 				
-				// printf("Block %d thread %d consumed %d %d\n", blockIdx.x,threadIdx.x, in1, in2);
 				valid[idx + (blockIdx.x)*(N/2)] = 0; //valid[idx*2 + 1 + (blockIdx.x)*N] = 0;
 			
-				//printf("waiting for next block %d to consume\n", blockIdx.x + 1);
+
 				while((valid[idx + (blockIdx.x+1)*(N/2)])==1);
-				// if ((in1 & mask) < (in2 & mask)){
+				if ((in1 & mask) < (in2 & mask)){
 					network[idx*2 + (blockIdx.x+1)*N] = in1;
 					network[idx*2 + (blockIdx.x+1)*N + 1] = in2;
-					// printf("Block %d produced %d %d\n", blockIdx.x, in1, in2);
-				// }
-				// else{
-				// 	network[idx*2 + (blockIdx.x+1)*N] = in2;
-				// 	network[idx*2 + (blockIdx.x+1)*N + 1] = in1;  
-				// }
-				//printf("Block %d produced %d %d\n", blockIdx.x, in1, in2);
+				}
+				else{
+					network[idx*2 + (blockIdx.x+1)*N] = in2;
+					network[idx*2 + (blockIdx.x+1)*N + 1] = in1;  
+				}
 				if (blockIdx.x != gridDim.x - 1){
-					valid[idx + (blockIdx.x+1)*(N/2)]=1; //valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
-					// printf("valid:%d index:%d\n",valid[idx + (blockIdx.x+1)*N],idx + (blockIdx.x+1)*N);
+					valid[idx + (blockIdx.x+1)*(N/2)]=1; 
 				}
 				else {
 					output[idx*2 + readOffsetSecondNet] = network[idx*2 + (blockIdx.x+1)*N];
 					output[idx*2+1 + readOffsetSecondNet] = network[idx*2 + (blockIdx.x+1)*N + 1];
 				}
-				// printf("HEREEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE\n");
 				readOffsetSecondNet += N;
 			}
 		}
@@ -266,9 +251,6 @@ int main(int argc, char *argv[]){
 		printf("%d ", output[i]);
 	}
 	printf("\n\n");
-
-  
-	printf("The output is:");
 	for (int i = 0; i < FILESIZE-1; i++){
 		if (i%N != N-1) {
 			if((mask & output[i+1]) < (mask & output[i])){
