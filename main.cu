@@ -16,7 +16,7 @@
 using namespace cooperative_groups;
 namespace cg = cooperative_groups;
 
-#define FILESIZE 256
+#define FILESIZE 32
 
 
 
@@ -73,15 +73,14 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 				//printf("Block %d produced %d %d\n", blockIdx.x, in1, in2);
 				//printf("waiting for next block %d to consume\n", blockIdx.x + 1);
 				while((valid[idx + (blockIdx.x+1)*(N/2)])==1);
-				// if ((in1 & mask) < (in2 & mask)){
-				network[idx*2 + (blockIdx.x+1)*N] = in1;  
-				network[idx*2 + (blockIdx.x+1)*N + 1] = in2;
-				
-				// }
-				// else{
-				// 	network[idx*2 + (blockIdx.x+1)*N] = in2;  
-				// 	network[idx*2 + (blockIdx.x+1)*N + 1] = in1;
-				// }
+				if ((in1 & mask) < (in2 & mask)){
+					network[idx*2 + (blockIdx.x+1)*N] = in1;  
+					network[idx*2 + (blockIdx.x+1)*N + 1] = in2;
+				}
+				else{
+					network[idx*2 + (blockIdx.x+1)*N] = in2;  
+					network[idx*2 + (blockIdx.x+1)*N + 1] = in1;
+				}
 				g.sync();
 				valid[idx + (blockIdx.x+1)*(N/2)]=1;// valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
 				
@@ -101,18 +100,18 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 			
 				//printf("waiting for next block %d to consume\n", blockIdx.x + 1);
 				while((valid[idx + (blockIdx.x+1)*(N/2)])==1);
-				// if ((in1 & mask) < (in2 & mask)){
-				network[idx*2 + (blockIdx.x+1)*N] = in1;
-				network[idx*2 + (blockIdx.x+1)*N + 1] = in2;
+				if ((in1 & mask) < (in2 & mask)){
+					network[idx*2 + (blockIdx.x+1)*N] = in1;
+					network[idx*2 + (blockIdx.x+1)*N + 1] = in2;
+					
+				}
+				else{
+					network[idx*2 + (blockIdx.x+1)*N] = in2;
+					network[idx*2 + (blockIdx.x+1)*N + 1] = in1;  
+				}
 				g.sync();
-				// }
-				// else{
-				// 	network[idx*2 + (blockIdx.x+1)*N] = in2;
-				// 	network[idx*2 + (blockIdx.x+1)*N + 1] = in1;  
-				// }
-				
 				if (blockIdx.x != gridDim.x - 1 && blockIdx.x != block-1){
-					g.sync();
+					
 					valid[idx + (blockIdx.x+1)*(N/2)]=1;// valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
 				}
 				else {
@@ -134,18 +133,17 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 				// printf("Block %d produced %d %d\n", blockIdx.x, in1, in2);
 				//printf("waiting for next block %d to consume\n", blockIdx.x + 1);
 				while((valid[idx + (blockIdx.x+1)*(N/2)])==1);
-				// if ((in1 & mask) < (in2 & mask)){
+				if ((in1 & mask) < (in2 & mask)){
 					network[idx*2 + (blockIdx.x+1)*N] = in1;  
 					network[idx*2 + (blockIdx.x+1)*N + 1] = in2;
-				// }
-				// else{
-				// 	network[idx*2 + (blockIdx.x+1)*N] = in2;  
-				// 	network[idx*2 + (blockIdx.x+1)*N + 1] = in1;
-				// }
-				__syncthreads();
+				}
+				else{
+					network[idx*2 + (blockIdx.x+1)*N] = in2;  
+					network[idx*2 + (blockIdx.x+1)*N + 1] = in1;
+				}
+				g.sync();
 				// printf("Block %d produced %d %d\n", blockIdx.x, network[idx*2 + (blockIdx.x+1)*N],network[idx*2 + (blockIdx.x+1)*N+1]);
 				valid[idx + (blockIdx.x+1)*(N/2)]=1;// valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
-				__syncthreads();
 			}
 		}
 		
@@ -178,7 +176,7 @@ void benes(int N, int block, char* network, int* LUT, volatile int* valid, int m
 				//printf("Block %d produced %d %d\n", blockIdx.x, in1, in2);
 				if (blockIdx.x != gridDim.x - 1){
 					valid[idx + (blockIdx.x+1)*(N/2)]=1; //valid[idx*2 + 1 + (blockIdx.x+1)*N]=1;
-					printf("valid:%d index:%d\n",valid[idx + (blockIdx.x+1)*N],idx + (blockIdx.x+1)*N);
+					// printf("valid:%d index:%d\n",valid[idx + (blockIdx.x+1)*N],idx + (blockIdx.x+1)*N);
 				}
 				else {
 					output[idx*2 + readOffsetSecondNet] = network[idx*2 + (blockIdx.x+1)*N];
@@ -262,12 +260,24 @@ int main(int argc, char *argv[]){
 	}
 	printf("\n\n");
 
-  
 	printf("The output is:");
 	for (int i = 0; i < FILESIZE; i++){
 		if (i%N == 0) printf("\n");
 		printf("%d ", output[i]);
 	}
+	printf("\n\n");
+
+  
+	printf("The output is:");
+	for (int i = 0; i < FILESIZE-1; i++){
+		if (i%N != N-1) {
+			if((mask & output[i+1]) < (mask & output[i])){
+				printf("ERROR in routing at output %d %d %d\n",i ,output[i+1],output[i] );
+				return 1;
+			}
+		}
+	}
+	printf("Routing was successful!\n");
 	printf("\n");
    
 	cudaFree(valid);

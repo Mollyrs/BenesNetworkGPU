@@ -4,9 +4,9 @@ a=[]
 n=0
 seed(1024)
 # print(int(random()*256), int(random()*256), int(random()*256))
-while(n<256):
-    if (int(abs(random()*256)) not in a):
-        a.append(int(abs(random()*256)))
+while(n<128):
+    if (int(abs(random()*128)) not in a):
+        a.append(int(abs(random()*128)))
         n += 1
 n=0
 f = open("demofile3.dat", "w")
